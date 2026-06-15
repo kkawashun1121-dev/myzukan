@@ -83,3 +83,26 @@ def delete_creature(creature_id:int,db:Session=Depends(get_db),current_user:str=
     db.commit()
     return f'{creature_id}が削除されました。'
 
+@app.post('/register')
+def register(user:UserCreate,db:Session= Depends(get_db)):
+    existing=db.query(User),filter(User.username==user.username).first()
+    if existing:
+        raise HTTPException(status_code=400,detail="このユーザー名は既に使われています")
+    
+    new_user=User(
+        username=user.username,
+        hashed_password=hash_password(user.password)
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"message":"登録完了","username":new_user.username}
+
+@app.post("/login")
+def login(form_data:OAuth2PasswordRequestForm=Depends(),db:Session=Depends(get_db)):
+    db_user=db.query(User).filter(User.username==form_data.username).first()
+    if not db_user or not verify_password(form_data.password,db_user.hashed_password):
+        raise HTTPException(status_code=401,detail="ユーザー名またはパスワードが間違っています")
+    
+    token=create_access_token({"sub":db_user.username})
+    return {"access_token":token,"token_type":"bearer"}
