@@ -683,3 +683,4 @@ DELETE /creatures/{creature_id} → 成功
 - 上記リファクタリング（`get_current_db_user`の導入）
 - 虫かご機能（Cage CRUD）への着手
 - Anthropic APIで飼育方法の自動生成（無料クレジットの範囲を確認しつつ）
+ 
