@@ -26,7 +26,7 @@ def create_access_token(data:dict):
 oauth2_scheme=OAuth2PasswordBearer(tokenUrl="login")
 
 def get_current_user(token:str=Depends(oauth2_scheme)):
-    credentials_exception=HTTPSException(
+    credentials_exception=HTTPException(
         status_code=401,
         detail="認証所法が無効です",
         headers={"WWW-Authenticate":"Bearer"}
