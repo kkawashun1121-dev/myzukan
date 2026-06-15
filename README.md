@@ -459,3 +459,227 @@ def get_tasks(db: Session = Depends(get_db), get_current_user: str = Depends(get
 data = {"organs": ["flower"], "lang": "ja"}
 response = requests.post(url, files=files, data=data)
 ```
+
+# Day 9 まとめ：図鑑機能（Creature CRUD）
+
+---
+
+## 1. 今日やったこと
+
+```
+zukan-appに、生物図鑑（Creature）のCRUDを実装
+  ↓
+myapp（タスク管理アプリ）のdatabase.py / models.py(User) / auth.pyを移植
+  ↓
+POST / GET / PUT / DELETE /creatures を実装
+  ↓
+動作確認・バグ修正
+```
+
+---
+
+## 2. models.py - Creatureテーブルの追加
+
+```python
+from sqlalchemy import Column, Integer, String, ForeignKey
+from database import Base
+
+class Creature(Base):
+    __tablename__ = "zukan"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(String, nullable=False)
+    image_url = Column(String, nullable=True)
+    care_guide = Column(String, nullable=True)
+```
+
+- `ForeignKey("users.id")` → テーブル名は複数形`users`
+- `Column(String, ...)`：`str`(Python型)と`String`(SQLAlchemy型)は別物
+- `name`に`unique=True`は付けない（同じ名前の生物を複数登録できるようにするため）
+
+---
+
+## 3. main.py - Creature CRUD
+
+### Pydanticモデル
+
+```python
+class CreatureCreate(BaseModel):
+    name: str
+    image_url: str | None = None
+    care_guide: str | None = None
+```
+
+### POST /creatures（登録）
+
+```python
+@app.post('/creatures')
+def create_creature(zukan: CreatureCreate, db: Session = Depends(get_db),
+                     current_user: str = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.username == current_user).first()
+
+    new_creature = Creature(
+        name=zukan.name,
+        image_url=zukan.image_url,
+        care_guide=zukan.care_guide,
+        owner_id=db_user.id
+    )
+    db.add(new_creature)
+    db.commit()
+    db.refresh(new_creature)
+    return new_creature
+```
+
+### GET /creatures（自分の図鑑一覧）
+
+```python
+@app.get("/creatures")
+def get_creatures(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.username == current_user).first()
+    return db.query(Creature).filter(Creature.owner_id == db_user.id).all()
+```
+
+### PUT /creatures/{creature_id}（更新）
+
+```python
+@app.put("/creatures/{creature_id}")
+def update_creature(creature_id: int, zukan: CreatureCreate, db: Session = Depends(get_db),
+                     current_user: str = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.username == current_user).first()
+    creature = db.query(Creature).filter(Creature.id == creature_id, Creature.owner_id == db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail=f"生物{creature_id}が見つかりません")
+    creature.name = zukan.name
+    creature.image_url = zukan.image_url
+    creature.care_guide = zukan.care_guide
+    db.commit()
+    db.refresh(creature)
+    return creature
+```
+
+### DELETE /creatures/{creature_id}（削除）
+
+```python
+@app.delete("/creatures/{creature_id}")
+def delete_creature(creature_id: int, db: Session = Depends(get_db),
+                     current_user: str = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.username == current_user).first()
+    creature = db.query(Creature).filter(Creature.id == creature_id, Creature.owner_id == db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail=f"生物{creature_id}が見つかりません")
+    db.delete(creature)
+    db.commit()
+    return f'{creature_id}が削除されました。'
+```
+
+### ポイント
+
+- 4つのエンドポイント全てで「`current_user`(ユーザー名) → `db_user`(Userオブジェクト) → `owner_id`で絞り込み」という同じパターンを使う
+- `PUT`/`DELETE`では`Creature.id == creature_id`と`Creature.owner_id == db_user.id`を**両方**フィルタに入れることで、「自分の持ち物だけ操作できる」を実現
+
+---
+
+## 4. zukan-appのセットアップで出たエラーと修正
+
+myappとは別の仮想環境のため、ライブラリの再インストールやコードの再記述が必要だった。
+
+### モジュール不足
+
+```
+ModuleNotFoundError: No module named 'jose'
+```
+→ `pip install passlib[bcrypt] python-jose[cryptography] python-multipart` と `pip install bcrypt==4.0.1` を再実行
+
+### auth.pyのtypo
+
+```python
+from fastapi import Depends, HTTPSException   # ❌
+from fastapi import Depends, HTTPException    # ✅
+```
+
+### database.pyのtypo
+
+```python
+SessionLocal = sessionmaker(aoutcommit=..., ...)   # ❌
+SessionLocal = sessionmaker(autocommit=..., ...)   # ✅
+```
+
+### /registerのカンマ・ドットミス
+
+```python
+existing = db.query(User), filter(User.username==user.username).first()  # ❌
+existing = db.query(User).filter(User.username==user.username).first()   # ✅
+```
+`,`になっていたため、`db.query(User)`と組み込み関数`filter()`の2つに分かれてしまい、`filter()`の引数不足エラーになった。
+
+---
+
+## 5. よくやったミス（コーディング中）
+
+### クラス名・型名のtypo
+
+```python
+class Create(Base):       # ❌ Creature
+Column(string, ...)       # ❌ String（小文字strはNG）
+ForeignKey("user.id")     # ❌ users（複数形）
+```
+
+### CreatureCreateとCreature、変数名zukanの混同
+
+- `Creature`：DBのテーブル（モデルクラス）
+- `CreatureCreate`：リクエストbodyの形（Pydantic）
+- `zukan`：たまたま付けた引数名（テーブル名`__tablename__="zukan"`とは無関係）
+
+### フィルタ条件の書き間違い
+
+```python
+db.query(CreatureCreate)...                          # ❌ DBモデルはCreature
+.filter(zukan.ower_id == db_get_user.id)             # ❌ 存在しない変数・typo
+.filter(Creature.id == db_user.id, ...)              # ❌ creature_idと比較すべき
+db.user = db.query(User)...                          # ❌ db_userという新しい変数にする
+```
+
+### 古いエンドポイントの残存
+
+最初に書いた`@app.post("/creatures/{creature_id}")`（認証・所有者チェック無し）を削除せずに残してしまい、誰でも他人のCreatureを取得できる状態になっていた。`PUT`に書き直した後は、古いエンドポイントを削除する必要がある。
+
+---
+
+## 6. リファクタリングの提案（次回以降）
+
+`db_user = db.query(User).filter(User.username == current_user).first()`が4つのエンドポイントで重複している。`auth.py`に依存関数を1つ追加することで解消できる：
+
+```python
+def get_current_db_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    username = get_current_user(token)
+    return db.query(User).filter(User.username == username).first()
+```
+
+```python
+@app.get("/creatures")
+def get_creatures(db: Session = Depends(get_db), db_user: User = Depends(get_current_db_user)):
+    return db.query(Creature).filter(Creature.owner_id == db_user.id).all()
+```
+
+---
+
+## 7. 動作確認結果
+
+```
+/register → 成功
+ログイン（Authorize） → 成功
+POST /creatures → 成功
+GET /creatures → 成功
+PUT /creatures/{creature_id} → 成功
+DELETE /creatures/{creature_id} → 成功
+権限チェック（未認証・他人のデータ） → 拒否されることを確認
+```
+
+---
+
+## 次回予告
+
+- 上記リファクタリング（`get_current_db_user`の導入）
+- 虫かご機能（Cage CRUD）への着手
+- Anthropic APIで飼育方法の自動生成（無料クレジットの範囲を確認しつつ）
