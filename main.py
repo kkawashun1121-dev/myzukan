@@ -50,7 +50,9 @@ def get_creatures(db:Session=Depends(get_db),current_user:str=Depends(get_curren
     return db.query(Creature).filter(Creature.owner_id == db_user.id).all()
 
 @app.post("/creatures/{creature_id}")
-def get_creature(creature_id:int, db:Session=Depends(get_db)):
+def get_creature(creature_id:int, db:Session=Depends(get_db),current_user:str=Depends(get_current_user)):
+    
+    db_user=db.query(User).filter(User.username==current_user).first()
     creature=db.query(Creature).filter(Creature.id==creature_id).first()
     if not creature:
         raise HTTPException(status_code=404,detail=f"生物 {creature_id}が見つかりません")
@@ -85,7 +87,7 @@ def delete_creature(creature_id:int,db:Session=Depends(get_db),current_user:str=
 
 @app.post('/register')
 def register(user:UserCreate,db:Session= Depends(get_db)):
-    existing=db.query(User),filter(User.username==user.username).first()
+    existing=db.query(User).filter(User.username==user.username).first()
     if existing:
         raise HTTPException(status_code=400,detail="このユーザー名は既に使われています")
     
