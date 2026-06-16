@@ -11,8 +11,6 @@ class Creature(Base):
     care_guide=Column(String,nullable=True)
 
 
-
-
 class User(Base):
     __tablename__ = 'users'
 

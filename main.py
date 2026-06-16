@@ -7,6 +7,11 @@ from models import Creature, User,Cage,Base
 from fastapi.security import OAuth2PasswordRequestForm
 from auth import hash_password, verify_password, create_access_token,get_current_user
 
+from groq import Groq
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
@@ -53,6 +58,7 @@ def login(form_data:OAuth2PasswordRequestForm=Depends(),db:Session=Depends(get_d
     
     token=create_access_token({"sub":db_user.username})
     return {"access_token":token,"token_type":"bearer"}
+
 
 
 def get_current_db_user(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
@@ -152,3 +158,23 @@ def delete_cage(cage_id:int,db:Session=Depends(get_db),db_user=Depends(get_curre
     db.commit()
     return f'{cage_id}が削除されました。'
 
+@app.post("/creatures/{creature_id}/care-guide")
+def post_care_guide(creature_id:int,db:Session=Depends(get_db),db_user=Depends(get_current_db_user)):
+    
+    creature=db.query(Creature).filter(Creature.id==creature_id,Creature.owner_id==db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+    response = client.chat.completions.create(
+    model="llama-3.1-8b-instant",
+    messages=[
+        {"role": "user", "content": f"{creature.name}飼育方法を100字以内で教えてください。"}
+        ]
+    )
+    creature_care_guide = response.choices[0].message.content
+
+    creature.care_guide = creature_care_guide
+    db.commit()
+    db.refresh(creature)
+    return creature
