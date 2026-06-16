@@ -27,11 +27,15 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
-@app.post('/creatures')
-def create_creature(zukan:CreatureCreate, db:Session = Depends(get_db),
-                    current_user:str=Depends(get_current_user)):
+def get_current_db_user(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
     db_user = db.query(User).filter(User.username==current_user).first()
-    
+    return db_user
+
+@app.post('/creatures')
+def create_creature(zukan:CreatureCreate,
+                    db:Session = Depends(get_db),
+                    db_user=Depends(get_current_db_user)
+                    ):
     new_creature=Creature(
         name=zukan.name,
         image_url=zukan.image_url,
@@ -43,28 +47,12 @@ def create_creature(zukan:CreatureCreate, db:Session = Depends(get_db),
     db.refresh(new_creature)
     return new_creature
 
-@app.get("/creatures")
-def get_creatures(db:Session=Depends(get_db),current_user:str=Depends(get_current_user)):
-    db_user=db.query(User).filter(User.username==current_user).first()
-
-    return db.query(Creature).filter(Creature.owner_id == db_user.id).all()
-
-@app.post("/creatures/{creature_id}")
-def get_creature(creature_id:int, db:Session=Depends(get_db),current_user:str=Depends(get_current_user)):
-    
-    db_user=db.query(User).filter(User.username==current_user).first()
-    creature=db.query(Creature).filter(Creature.id==creature_id).first()
-    if not creature:
-        raise HTTPException(status_code=404,detail=f"生物 {creature_id}が見つかりません")
-    return creature
-
 @app.put("/creatures/{creature_id}")
 def update_creature(creature_id:int,
                     zukan:CreatureCreate,
                     db:Session=Depends(get_db),
-                    current_user:str=Depends(get_current_user)
-               ):
-    db_user=db.query(User).filter(User.username==current_user).first()
+                    db_user=Depends(get_current_db_user)
+                    ):
     creature=db.query(Creature).filter(Creature.id==creature_id,Creature.owner_id==db_user.id).first()
     if not creature:
         raise HTTPException(status_code=404,detail=f"生物{creature_id}が見つかりません")
@@ -76,8 +64,8 @@ def update_creature(creature_id:int,
     return creature
 
 @app.delete("/creatures/{creature_id}")
-def delete_creature(creature_id:int,db:Session=Depends(get_db),current_user:str=Depends(get_current_user)):
-    db_user=db.query(User).filter(User.username==current_user).first()
+def delete_creature(creature_id:int,db:Session=Depends(get_db),db_user=Depends(get_current_db_user)):
+    
     creature=db.query(Creature).filter(Creature.id==creature_id,Creature.owner_id==db_user.id).first()
     if not creature:
         raise HTTPException(status_code=404,detail=f"生物{creature_id}が見つかりません")
