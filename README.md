@@ -684,3 +684,225 @@ DELETE /creatures/{creature_id} → 成功
 - 虫かご機能（Cage CRUD）への着手
 - Anthropic APIで飼育方法の自動生成（無料クレジットの範囲を確認しつつ）
  
+ # Day 10 まとめ：リファクタリング・Cage CRUD・AI飼育方法生成
+
+---
+
+## 1. 今日やったこと
+
+```
+get_current_db_userで重複コードをリファクタリング
+  ↓
+虫かご機能（Cage CRUD）の実装
+  ↓
+Groq APIを使った飼育方法の自動生成
+```
+
+---
+
+## 2. リファクタリング：get_current_db_user
+
+### 問題
+4つのエンドポイント全てに同じ2行が重複していた:
+```python
+current_user: str = Depends(get_current_user)   # 引数
+db_user = db.query(User).filter(User.username == current_user).first()  # 毎回書いていた
+```
+
+### 解決策
+`main.py`に依存関数を1つ追加:
+
+```python
+def get_current_db_user(db: Session = Depends(get_db), current_user: str = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.username == current_user).first()
+    return db_user
+```
+
+### 使い方
+```python
+# Before
+def create_creature(..., current_user: str = Depends(get_current_user)):
+    db_user = db.query(User).filter(User.username == current_user).first()
+
+# After
+def create_creature(..., db_user=Depends(get_current_db_user)):
+    # db_userがそのまま使える
+```
+
+- `current_user`(文字列)と`db_user`(オブジェクト)の2段階を1つにまとめた
+- 全エンドポイントで同じパターンを再利用できる
+
+---
+
+## 3. Cage CRUD
+
+### models.py
+
+```python
+class Cage(Base):
+    __tablename__ = "cages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(String, nullable=False)
+```
+
+### Pydanticモデル
+
+```python
+class CageCreate(BaseModel):
+    name: str
+```
+
+### エンドポイント
+
+```python
+@app.post("/cages")
+def post_cage(cage: CageCreate, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    new_cage = Cage(name=cage.name, owner_id=db_user.id)
+    db.add(new_cage)
+    db.commit()
+    db.refresh(new_cage)
+    return new_cage
+
+@app.get("/cages")
+def get_cages(db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    return db.query(Cage).filter(Cage.owner_id == db_user.id).all()
+
+@app.put("/cages/{cage_id}")
+def update_cage(cage_id: int, cage: CageCreate, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    cage_name = db.query(Cage).filter(Cage.id == cage_id, Cage.owner_id == db_user.id).first()
+    if not cage_name:
+        raise HTTPException(status_code=404, detail=f"カゴ{cage_id}が見つかりません")
+    cage_name.name = cage.name
+    db.commit()
+    db.refresh(cage_name)
+    return cage_name
+
+@app.delete("/cages/{cage_id}")
+def delete_cage(cage_id: int, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    cage_name = db.query(Cage).filter(Cage.id == cage_id, Cage.owner_id == db_user.id).first()
+    if not cage_name:
+        raise HTTPException(status_code=404, detail=f"カゴ{cage_id}が見つかりません")
+    db.delete(cage_name)
+    db.commit()
+    return f'{cage_id}が削除されました。'
+```
+
+---
+
+## 4. AI飼育方法生成（Groq API）
+
+### Groqとは
+- 無料・クレジットカード不要・地域制限なし
+- Llama等のオープンソースモデルを超高速で実行できるサービス
+- 無料枠: 1日14,400リクエスト、1分30リクエスト
+
+### AnthropicとGeminiが使えなかった理由
+- **Anthropic API**: クレジットカード登録が必要（無料クレジット$5はあるが）
+- **Google Gemini API**: 日本からは無料枠のquotaが`limit: 0`（地域制限）
+
+### インストール・セットアップ
+
+```powershell
+pip install groq
+```
+
+```
+# .env
+GROQ_API_KEY=gsk_xxxx...
+```
+
+### テストコード（test_groq.py）
+
+```python
+from groq import Groq
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+client = Groq(api_key=os.environ["GROQ_API_KEY"])
+
+response = client.chat.completions.create(
+    model="llama-3.1-8b-instant",
+    messages=[
+        {"role": "user", "content": "タンポポの飼育方法を200字以内で教えてください。"}
+    ]
+)
+print(response.choices[0].message.content)
+```
+
+### エンドポイントへの組み込み
+
+```python
+@app.post("/creatures/{creature_id}/care-guide")
+def post_care_guide(creature_id: int, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    creature = db.query(Creature).filter(Creature.id == creature_id, Creature.owner_id == db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail="見つかりません")
+
+    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instant",
+        messages=[
+            {"role": "user", "content": f"{creature.name}の飼育方法を200字以内で教えてください。"}
+        ]
+    )
+    creature.care_guide = response.choices[0].message.content
+    db.commit()
+    db.refresh(creature)
+    return creature
+```
+
+---
+
+## 5. トークンについて
+
+- AIはテキストを「トークン」という単位で処理する
+- 日本語は1〜2文字で1トークン程度
+- APIの使用量は「何トークン使ったか」で計算される
+- **入力(プロンプト)も出力(返答)も両方カウントされる**
+- 1回のリクエストで約200〜300トークン消費
+
+---
+
+## 6. よくやったミス
+
+### ForeignKeyのテーブル名
+
+```python
+ForeignKey("user.id")    # ❌ 単数形
+ForeignKey("users.id")   # ✅ 複数形（Userモデルの__tablename__に合わせる）
+```
+
+### db.commitの引数
+
+```python
+db.commit(creature)   # ❌ 引数は不要
+db.commit()           # ✅
+```
+
+### os.environとload_dotenv()の追加忘れ
+
+Groq APIキーを使うには`main.py`に以下が必要:
+```python
+import os
+from dotenv import load_dotenv
+load_dotenv()
+```
+
+---
+
+## 7. 今後の改善点
+
+- 生物名だけでは種類が曖昧（「さくら」→カメと誤認）
+  → Pl@ntNetで取得した**学名**をプロンプトに使うと精度が上がる
+- `care_guide`はユーザーが手動編集可能（`PUT /creatures/{creature_id}`で実装済み）
+- Groqのモデルを`llama-3.3-70b-versatile`に変えると日本語品質が向上（1日1,000リクエストに減る）
+
+---
+
+## 次回予告
+
+- CageとCreatureの紐付け（虫かごに生物を入れる機能）
+- フロントエンド構築（HTML/CSS/JS）への着手
