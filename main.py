@@ -169,8 +169,14 @@ def post_care_guide(creature_id:int,db:Session=Depends(get_db),db_user=Depends(g
     response = client.chat.completions.create(
     model="llama-3.1-8b-instant",
     messages=[
-        {"role": "user", "content": f"{creature.name}飼育方法を100字以内で教えてください。"}
-        ]
+        {"role": "user", "content": f"""あなたは生物の飼育専門家です。
+「{creature.name}」の飼育方法を以下の形式で教えてください。
+
+- 必要な環境（温度・湿度・住む場所）
+- 食べ物
+- 注意点
+
+各項目1〜2文で、合計100字以内でまとめてください。"""}]
     )
     creature_care_guide = response.choices[0].message.content
 
