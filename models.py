@@ -6,9 +6,11 @@ class Creature(Base):
 
     id=Column(Integer, primary_key=True,index=True)
     owner_id=Column(Integer,ForeignKey("users.id"))
+    cage_id=Column(Integer,ForeignKey("cages.id"),nullable=True)
     name=Column(String,nullable=False)
     image_url=Column(String,nullable=True)
     care_guide=Column(String,nullable=True)
+    
 
 
 class User(Base):
@@ -24,4 +26,3 @@ class Cage(Base):
     id=Column(Integer,primary_key=True,index=True)
     owner_id=Column(Integer,ForeignKey("users.id"))
     name=Column(String,nullable=False)
-    
