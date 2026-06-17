@@ -5,51 +5,118 @@
 }
 
 body {
-    font-family: 'Segoe UI', sans-serif;
-    background-color: #f0f7e6;
+    font-family: 'Segoe UI', 'Hiragino Sans', sans-serif;
+    background-color: #f5f5f5;
     color: #333;
+    max-width: 390px;
+    margin: 0 auto;
+    min-height: 100vh;
+    position: relative;
+    padding-bottom: 70px;
 }
 
-h1 {
-    text-align: center;
-    padding: 20px;
-    background-color: #4a7c3f;
-    color: white;
-}
-
-.container {
-    max-width: 800px;
-    margin: 30px auto;
-    padding: 0 20px;
-}
-
-.card {
+.header {
     background: white;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 16px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 16px 20px;
+    border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-button {
-    background-color: #4a7c3f;
-    color: white;
+.header h1 {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.add-btn {
+    background-color: #a8c8e8;
+    color: #333;
     border: none;
-    padding: 10px 20px;
-    border-radius: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 14px;
     cursor: pointer;
-    font-size: 16px;
 }
 
-button:hover {
-    background-color: #3a6230;
+.subtitle {
+    padding: 16px 20px 8px;
+    font-size: 13px;
+    color: #888;
 }
 
-input {
-    width: 100%;
-    padding: 10px;
-    margin: 8px 0;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+.creature-card {
+    background: white;
+    margin: 8px 16px;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+}
+
+.creature-icon {
+    font-size: 36px;
+    width: 50px;
+    text-align: center;
+}
+
+.creature-info h3 {
     font-size: 16px;
+    font-weight: bold;
+}
+
+.creature-info .scientific {
+    font-size: 12px;
+    color: #999;
+    margin-top: 2px;
+}
+
+.badge {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-top: 4px;
+}
+
+.badge.ok {
+    background: #e8f4e8;
+    color: #4a8a4a;
+}
+
+.badge.none {
+    background: #fce8e8;
+    color: #c04a4a;
+}
+
+/* ボトムナビ */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    width: 390px;
+    background: white;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: space-around;
+    padding: 10px 0;
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 11px;
+    color: #aaa;
+    gap: 2px;
+    cursor: pointer;
+}
+
+.nav-item.active {
+    color: #5a9ad4;
+}
+
+.nav-icon {
+    font-size: 22px;
 }
