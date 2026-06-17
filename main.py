@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends , Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine
@@ -10,9 +10,15 @@ from auth import hash_password, verify_password, create_access_token,get_current
 from groq import Groq
 import os
 from dotenv import load_dotenv
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 load_dotenv()
 
 app = FastAPI()
+app.mount("/static",StaticFiles(directory="static"),name="static")
+templates=Jinja2Templates(directory="templates")
 
 Base.metadata.create_all(bind=engine)
 
@@ -184,3 +190,24 @@ def post_care_guide(creature_id:int,db:Session=Depends(get_db),db_user=Depends(g
     db.commit()
     db.refresh(creature)
     return creature
+
+
+@app.put("/creatures/{creature_id}/cage/{cage_id}")
+def put_creature_in_cage(creature_id:int,cage_id:int,db:Session=Depends(get_db),db_user=Depends(get_current_db_user)):
+    creature=db.query(Creature).filter(Creature.id==creature_id,Creature.owner_id==db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404,detail="生物が見つかりません")
+    cage=db.query(Cage).filter(Cage.id==cage_id,Cage.owner_id==db_user.id).first()
+    if not cage:
+        raise HTTPException(status_code=404,detail="カゴが見つかりません")
+    creature.cage_id=cage_id
+    db.commit()
+    db.refresh(creature)
+    return creature
+
+@app.get("/cages/{cage_id}/creatures")
+def get_creatures_in_cage(cage_id: int ,db:Session=Depends(get_db),db_user=Depends(get_current_db_user)):
+    cage=db.query(Cage).filter(Cage.id==cage_id,Cage.owner_id==db_user.id).first()
+    if not cage:
+        raise HTTPException(status_code=404,detail="カゴが見つかりません")
+    return db.query(Creature).filter(Creature.cage_id==cage_id).all()
