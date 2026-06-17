@@ -906,3 +906,233 @@ load_dotenv()
 
 - CageとCreatureの紐付け（虫かごに生物を入れる機能）
 - フロントエンド構築（HTML/CSS/JS）への着手
+
+# Day 11 まとめ：CageとCreatureの紐付け・フロントエンド着手
+
+---
+
+## 1. 今日やったこと
+
+```
+CageとCreatureの紐付け（cage_idを追加）
+  ↓
+フロントエンド構築開始（Jinja2 + HTML/CSS/JS）
+  ↓
+ログイン画面・図鑑一覧画面の実装
+  ↓
+JavaScriptでAPIと繋いでDBのデータを表示
+```
+
+---
+
+## 2. CageとCreatureの紐付け
+
+### models.py — cage_idを追加
+
+```python
+class Creature(Base):
+    __tablename__ = "zukan"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    cage_id = Column(Integer, ForeignKey("cages.id"), nullable=True)  # 追加
+    name = Column(String, nullable=False)
+    image_url = Column(String, nullable=True)
+    care_guide = Column(String, nullable=True)
+```
+
+- `nullable=True` → かごに入っていない状態（None）もOK
+- ForeignKeyは `"cages.id"` （ドット、複数形）
+
+### 新しいエンドポイント
+
+```python
+# 虫かごに生物を入れる
+@app.put("/creatures/{creature_id}/cage/{cage_id}")
+def put_creature_in_cage(creature_id: int, cage_id: int, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    creature = db.query(Creature).filter(Creature.id == creature_id, Creature.owner_id == db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail="生物が見つかりません")
+    cage = db.query(Cage).filter(Cage.id == cage_id, Cage.owner_id == db_user.id).first()
+    if not cage:
+        raise HTTPException(status_code=404, detail="虫かごが見つかりません")
+    creature.cage_id = cage_id
+    db.commit()
+    db.refresh(creature)
+    return creature
+
+# 虫かごの中の生物一覧
+@app.get("/cages/{cage_id}/creatures")
+def get_creatures_in_cage(cage_id: int, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    cage = db.query(Cage).filter(Cage.id == cage_id, Cage.owner_id == db_user.id).first()
+    if not cage:
+        raise HTTPException(status_code=404, detail="虫かごが見つかりません")
+    return db.query(Creature).filter(Creature.cage_id == cage_id).all()
+```
+
+---
+
+## 3. フロントエンドのセットアップ
+
+### インストール
+
+```powershell
+pip install jinja2
+```
+
+### フォルダ構成
+
+```
+zukan-app/
+├── main.py
+├── templates/
+│   ├── login.html
+│   └── creatures.html
+└── static/
+    └── style.css
+```
+
+### main.pyに追加
+
+```python
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+```
+
+### ページエンドポイント
+
+```python
+@app.get("/")
+def index(request: Request):
+    return templates.TemplateResponse(request=request, name="login.html")
+
+@app.get("/login-page")
+def login_page(request: Request):
+    return templates.TemplateResponse(request=request, name="login.html")
+
+@app.get("/creatures-page")
+def creatures_page(request: Request):
+    return templates.TemplateResponse(request=request, name="creatures.html")
+```
+
+---
+
+## 4. ログイン画面（login.html）
+
+- ユーザー名・パスワードの入力フォーム
+- `fetch("/login")`でPOST → tokenを取得
+- `localStorage.setItem("token", ...)`でtokenを保存
+- ログイン成功後 → `/creatures-page`にリダイレクト
+
+```javascript
+async function login() {
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    const form = new FormData();
+    form.append("username", username);
+    form.append("password", password);
+
+    const res = await fetch("/login", {
+        method: "POST",
+        body: form
+    });
+
+    if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("token", data.access_token);
+        location.href = "/creatures-page";
+    } else {
+        document.getElementById("error-msg").textContent = "ユーザー名またはパスワードが違います";
+    }
+}
+```
+
+---
+
+## 5. 図鑑一覧画面（creatures.html）
+
+- `localStorage.getItem("token")`でtokenを取得
+- `fetch("/creatures", { headers: { Authorization: "Bearer " + token } })`でGET
+- 取得したデータをHTMLに動的に追加
+
+```javascript
+async function loadCreatures() {
+    const token = localStorage.getItem("token");
+    const res = await fetch("/creatures", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const creatures = await res.json();
+
+    const list = document.getElementById("creature-list");
+    list.innerHTML = "";
+
+    creatures.forEach(c => {
+        const badge = c.care_guide
+            ? '<span class="badge ok">飼育方法あり</span>'
+            : '<span class="badge none">飼育方法未生成</span>';
+
+        list.innerHTML += `
+            <div class="creature-card">
+                <div class="creature-icon">🐛</div>
+                <div class="creature-info">
+                    <h3>${c.name}</h3>
+                    ${badge}
+                </div>
+            </div>
+        `;
+    });
+}
+
+loadCreatures();
+```
+
+---
+
+## 6. よくやったミス
+
+### ForeignKeyのスラッシュ・ドット
+
+```python
+ForeignKey("cages/id")   # ❌ スラッシュ
+ForeignKey("cages.id")   # ✅ ドット
+```
+
+### TemplateResponseの新しい書き方
+
+```python
+# 古い書き方（エラーになる場合がある）
+templates.TemplateResponse("index.html", {"request": request})
+
+# 新しい書き方
+templates.TemplateResponse(request=request, name="index.html")
+```
+
+### DBファイルの名前
+
+`database.py`のURLをmyappの名残から修正:
+```python
+SQLALCHEMY_DATABASE_URL = "sqlite:///./zukan.db"  # ✅
+```
+
+---
+
+## 7. フロントエンドの方針
+
+**JavaScript（fetch API）でバックエンドと繋ぐ**を選択。
+
+- Jinja2でサーバー側からデータを渡す方式より柔軟
+- 将来Reactに移行するときも同じfetchの考え方が使える
+- フロント（HTML/JS）とバックエンド（FastAPI）が分離されるので変更しやすい
+
+---
+
+## 次回予告
+
+- 生物詳細画面の実装
+- 虫かご画面の実装
+- ＋追加ボタンの実装（生物の登録フォーム）
