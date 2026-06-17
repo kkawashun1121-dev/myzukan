@@ -211,3 +211,11 @@ def get_creatures_in_cage(cage_id: int ,db:Session=Depends(get_db),db_user=Depen
     if not cage:
         raise HTTPException(status_code=404,detail="カゴが見つかりません")
     return db.query(Creature).filter(Creature.cage_id==cage_id).all()
+
+@app.get("/")
+def index(request:Request):
+    return templates.TemplateResponse(request=request,name="index.html")
+
+@app.get("/creatures-page")
+def creatures_page(request: Request):
+    return templates.TemplateResponse(request=request, name="creatures.html")
