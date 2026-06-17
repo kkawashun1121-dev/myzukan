@@ -219,3 +219,8 @@ def index(request:Request):
 @app.get("/creatures-page")
 def creatures_page(request: Request):
     return templates.TemplateResponse(request=request, name="creatures.html")
+
+
+@app.get("/login-page")
+def login_page(request: Request):
+    return templates.TemplateResponse(request=request, name="login.html")

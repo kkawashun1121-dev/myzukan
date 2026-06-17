@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="container">
+    <div class="card" style="text-align:center; margin-top: 60px;">
+        <div style="font-size: 60px; margin-bottom: 10px;">🦋</div>
+        <h2 style="margin-bottom: 6px;">生物図鑑</h2>
+        <p style="color: #999; font-size: 13px; margin-bottom: 24px;">あなただけの図鑑を作ろう</p>
+
+        <input type="text" id="username" placeholder="ユーザー名">
+        <input type="password" id="password" placeholder="パスワード">
+
+        <button onclick="login()" style="width:100%; margin-top: 8px;">ログイン</button>
+        <button onclick="location.href='/register-page'"
+                style="width:100%; margin-top: 8px; background:#eee; color:#333;">
+            新規登録
+        </button>
+
+        <p id="error-msg" style="color:red; margin-top:10px;"></p>
+    </div>
+</div>
+
+<script>
+    async function login() {
+        const username = document.getElementById("username").value;
+        const password = document.getElementById("password").value;
+
+        const form = new FormData();
+        form.append("username", username);
+        form.append("password", password);
+
+        const res = await fetch("/login", {
+            method: "POST",
+            body: form
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            localStorage.setItem("token", data.access_token);
+            location.href = "/creatures-page";
+        } else {
+            document.getElementById("error-msg").textContent = "ユーザー名またはパスワードが違います";
+        }
+    }
+</script>
+
+</body>
+</html>
