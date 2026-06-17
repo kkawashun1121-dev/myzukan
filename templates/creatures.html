@@ -6,6 +6,39 @@
     <title>図鑑一覧</title>
     <link rel="stylesheet" href="/static/style.css">
 </head>
+<script>
+    const token = localStorage.getItem("token");
+
+    async function loadCreatures() {
+        const res = await fetch("/creatures", {
+            headers: {
+                "Authorization": "Bearer " + token
+            }
+        });
+        const creatures = await res.json();
+
+        const list = document.getElementById("creature-list");
+        list.innerHTML = "";
+
+        creatures.forEach(c => {
+            const badge = c.care_guide
+                ? '<span class="badge ok">飼育方法あり</span>'
+                : '<span class="badge none">飼育方法未生成</span>';
+
+            list.innerHTML += `
+                <div class="creature-card">
+                    <div class="creature-icon">🐛</div>
+                    <div class="creature-info">
+                        <h3>${c.name}</h3>
+                        <span class="badge">${badge}</span>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    loadCreatures();
+</script>
 <body>
 
 <div class="header">
@@ -14,6 +47,7 @@
 </div>
 
 <p class="subtitle">登録した生物</p>
+<div id="creature-list"></div>
 
 <div class="creature-card">
     <div class="creature-icon">🌸</div>
