@@ -65,7 +65,7 @@ async function loadCreatures() {
         const badge = c.care_guide
             ? '<span class="badge ok">飼育方法あり</span>'
             : '<span class="badge none">飼育方法未生成</span>';
-        const icon = c.image_url || "🐛";
+        const icon = c.image_url || "";
 
         list.innerHTML += `
             <div class="creature-card">
@@ -91,32 +91,6 @@ loadCreatures();
 <p class="subtitle">登録した生物</p>
 <div id="creature-list"></div>
 
-<div class="creature-card">
-    <div class="creature-icon">🌸</div>
-    <div class="creature-info">
-        <h3>さくら</h3>
-        <div class="scientific">Prunus × yedoensis</div>
-        <span class="badge ok">飼育方法あり</span>
-    </div>
-</div>
-
-<div class="creature-card">
-    <div class="creature-icon">🌼</div>
-    <div class="creature-info">
-        <h3>タンポポ</h3>
-        <div class="scientific">Taraxacum officinale</div>
-        <span class="badge none">飼育方法未生成</span>
-    </div>
-</div>
-
-<div class="creature-card">
-    <div class="creature-icon">🪲</div>
-    <div class="creature-info">
-        <h3>カブトムシ</h3>
-        <div class="scientific">Trypoxylus dichotomus</div>
-        <span class="badge ok">飼育方法あり</span>
-    </div>
-</div>
 
 <nav class="bottom-nav">
     <div class="nav-item active">
@@ -141,7 +115,7 @@ loadCreatures();
         <p style="margin-top:12px; margin-bottom:8px; font-size:13px; color:#888;">アイコンを選択</p>
         <div id="icon-picker" style="display:flex; flex-wrap:wrap; gap:8px;">
         </div>
-        <input type="hidden" id="selected-icon" value="🐛">
+        <input type="hidden" id="selected-icon" value="">
 
         <button onclick="addCreature()" style="width:100%; margin-top:16px;">登録する</button>
         <button onclick="closeModal()" style="width:100%; margin-top:8px; background:#eee; color:#333;">キャンセル</button>
