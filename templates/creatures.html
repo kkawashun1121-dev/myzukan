@@ -7,43 +7,85 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <script>
-    const token = localStorage.getItem("token");
+const token = localStorage.getItem("token");
 
-    async function loadCreatures() {
-        const res = await fetch("/creatures", {
-            headers: {
-                "Authorization": "Bearer " + token
-            }
-        });
-        const creatures = await res.json();
+const icons = ["🐛","🦋","🐝","🐞","🦗","🪲","🦟","🐜","🪳","🦎","🐢","🐸","🐠","🌸","🌼","🌿"];
 
-        const list = document.getElementById("creature-list");
-        list.innerHTML = "";
+function openModal() {
+    const picker = document.getElementById("icon-picker");
+    picker.innerHTML = "";
+    icons.forEach(icon => {
+        const btn = document.createElement("span");
+        btn.textContent = icon;
+        btn.style.cssText = "font-size:28px; cursor:pointer; padding:4px; border-radius:8px;";
+        btn.onclick = () => {
+            document.getElementById("selected-icon").value = icon;
+            document.querySelectorAll("#icon-picker span").forEach(s => s.style.background = "");
+            btn.style.background = "#d0e8ff";
+        };
+        picker.appendChild(btn);
+    });
+    document.getElementById("modal").style.display = "block";
+}
 
-        creatures.forEach(c => {
-            const badge = c.care_guide
-                ? '<span class="badge ok">飼育方法あり</span>'
-                : '<span class="badge none">飼育方法未生成</span>';
+function closeModal() {
+    document.getElementById("modal").style.display = "none";
+}
 
-            list.innerHTML += `
-                <div class="creature-card">
-                    <div class="creature-icon">🐛</div>
-                    <div class="creature-info">
-                        <h3>${c.name}</h3>
-                        <span class="badge">${badge}</span>
-                    </div>
-                </div>
-            `;
-        });
+async function addCreature() {
+    const name = document.getElementById("new-name").value;
+    const icon = document.getElementById("selected-icon").value;
+    if (!name) return;
+
+    const res = await fetch("/creatures", {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name: name, image_url: icon })
+    });
+
+    if (res.ok) {
+        document.getElementById("new-name").value = "";
+        closeModal();
+        loadCreatures();
     }
+}
 
-    loadCreatures();
+async function loadCreatures() {
+    const res = await fetch("/creatures", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const creatures = await res.json();
+    const list = document.getElementById("creature-list");
+    list.innerHTML = "";
+
+    creatures.forEach(c => {
+        const badge = c.care_guide
+            ? '<span class="badge ok">飼育方法あり</span>'
+            : '<span class="badge none">飼育方法未生成</span>';
+        const icon = c.image_url || "🐛";
+
+        list.innerHTML += `
+            <div class="creature-card">
+                <div class="creature-icon">${icon}</div>
+                <div class="creature-info">
+                    <h3>${c.name}</h3>
+                    ${badge}
+                </div>
+            </div>
+        `;
+    });
+}
+
+loadCreatures();
 </script>
 <body>
 
 <div class="header">
     <h1>📖 図鑑一覧</h1>
-    <button class="add-btn">＋追加</button>
+    <button class="add-btn" onclick="openModal()">＋追加</button>
 </div>
 
 <p class="subtitle">登録した生物</p>
@@ -91,5 +133,19 @@
     </div>
 </nav>
 
+<div id="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:100;">
+    <div style="background:white; margin:15% auto; padding:24px; border-radius:12px; width:300px;">
+        <h3 style="margin-bottom:16px;">生物を登録</h3>
+        <input type="text" id="new-name" placeholder="生物名（例：カマキリ）">
+
+        <p style="margin-top:12px; margin-bottom:8px; font-size:13px; color:#888;">アイコンを選択</p>
+        <div id="icon-picker" style="display:flex; flex-wrap:wrap; gap:8px;">
+        </div>
+        <input type="hidden" id="selected-icon" value="🐛">
+
+        <button onclick="addCreature()" style="width:100%; margin-top:16px;">登録する</button>
+        <button onclick="closeModal()" style="width:100%; margin-top:8px; background:#eee; color:#333;">キャンセル</button>
+    </div>
+</div>
 </body>
 </html>
