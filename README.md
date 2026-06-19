@@ -1136,3 +1136,261 @@ SQLALCHEMY_DATABASE_URL = "sqlite:///./zukan.db"  # ✅
 - 生物詳細画面の実装
 - 虫かご画面の実装
 - ＋追加ボタンの実装（生物の登録フォーム）
+
+# Day 12 まとめ：フロントエンド実装（図鑑一覧・生物詳細・虫かご画面）
+
+---
+
+## 1. 今日やったこと
+
+```
+＋追加ボタンの実装（アイコン選択 + 生物登録）
+  ↓
+生物詳細画面（detail.html）の実装
+  ↓
+虫かご画面（cage.html）の実装
+  ↓
+ボトムナビのリンク設定
+```
+
+---
+
+## 2. ＋追加ボタン（アイコン選択 + 生物登録）
+
+### アイコン選択の仕組み
+
+```javascript
+const icons = ["🐛","🦋","🐝","🐞","🦗","🪲","🦟","🐜","🪳","🦎","🐢","🐸","🐠","🌸","🌼","🌿"];
+
+function openModal() {
+    const picker = document.getElementById("icon-picker");
+    picker.innerHTML = "";  // 重複防止のためリセット
+    icons.forEach(icon => {
+        const btn = document.createElement("span");  // span要素を動的に生成
+        btn.textContent = icon;
+        btn.onclick = () => {
+            document.getElementById("selected-icon").value = icon;  // hidden inputに保存
+            document.querySelectorAll("#icon-picker span").forEach(s => s.style.background = "");
+            btn.style.background = "#d0e8ff";  // 選択中だけ青背景
+        };
+        picker.appendChild(btn);
+    });
+    document.getElementById("modal").style.display = "block";
+}
+```
+
+- `document.createElement("span")` → JavaScriptでHTML要素を動的に作る
+- `picker.innerHTML = ""` → モーダルを開くたびにリセット（重複防止）
+- `type="hidden"` → 画面に表示されないinput。選んだ絵文字を裏で保持する
+
+### 生物登録
+
+```javascript
+async function addCreature() {
+    const name = document.getElementById("new-name").value;
+    const icon = document.getElementById("selected-icon").value;
+    if (!name) return;  // 名前が空なら何もしない
+
+    const res = await fetch("/creatures", {
+        method: "POST",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json"  // JSONを送ることを宣言
+        },
+        body: JSON.stringify({ name: name, image_url: icon })  // オブジェクト→JSON文字列
+    });
+
+    if (res.ok) {
+        document.getElementById("new-name").value = "";
+        closeModal();
+        loadCreatures();  // 一覧を再取得して画面を更新
+    }
+}
+```
+
+---
+
+## 3. 生物詳細画面（detail.html）
+
+### URLパラメータでIDを受け取る
+
+```javascript
+const params = new URLSearchParams(window.location.search);
+const creatureId = params.get("id");
+```
+
+- `/detail-page?id=1` のURLから`id=1`を取り出す
+- `window.location.search` → URLの`?`以降の文字列
+
+### 生物データの取得・表示
+
+```javascript
+async function loadCreature() {
+    const res = await fetch(`/creatures/${creatureId}`, {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const c = await res.json();
+
+    document.getElementById("creature-icon").textContent = c.image_url || "🐛";
+    document.getElementById("creature-name").textContent = c.name;
+    document.getElementById("care-guide").textContent = c.care_guide || "未生成";
+}
+```
+
+### care-guide生成ボタン
+
+```javascript
+async function generateCareGuide() {
+    document.getElementById("generate-btn").textContent = "生成中...";
+    const res = await fetch(`/creatures/${creatureId}/care-guide`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token }
+    });
+    if (res.ok) {
+        loadCreature();  // 生成後に再取得して表示更新
+        document.getElementById("generate-btn").textContent = "AIで飼育方法を生成";
+    }
+}
+```
+
+### main.pyに追加したエンドポイント
+
+```python
+@app.get("/creatures/{creature_id}")
+def get_creature(creature_id: int, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    creature = db.query(Creature).filter(Creature.id == creature_id, Creature.owner_id == db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    return creature
+
+@app.get("/detail-page")
+def detail_page(request: Request):
+    return templates.TemplateResponse(request=request, name="detail.html")
+```
+
+---
+
+## 4. 虫かご画面（cage.html）
+
+### かご一覧 + 中の生物取得
+
+```javascript
+async function loadCages() {
+    const res = await fetch("/cages", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const cages = await res.json();
+
+    for (const cage of cages) {  // forEachではなくfor...ofを使う
+        const creaturesRes = await fetch(`/cages/${cage.id}/creatures`, {
+            headers: { "Authorization": "Bearer " + token }
+        });
+        const creatures = await creaturesRes.json();
+
+        const icons = creatures.map(c => c.image_url || "🐛").join(" ");
+
+        list.innerHTML += `
+            <div class="card">
+                <h3>🧺 ${cage.name}</h3>
+                <div>${icons || "空っぽ"}</div>
+            </div>
+        `;
+    }
+}
+```
+
+### forEachとfor...ofの違い
+
+```javascript
+// forEachの中ではawaitが正しく動かない
+cages.forEach(async cage => {
+    await fetch(...)  // ❌ 待ってくれない
+});
+
+// for...ofならawaitが正しく動く
+for (const cage of cages) {
+    await fetch(...)  // ✅ 待ってくれる
+}
+```
+
+### mapとjoin
+
+```javascript
+const icons = creatures.map(c => c.image_url || "🐛").join(" ");
+```
+
+- `map` → 配列を別の配列に変換
+```javascript
+[{name:"ゴキブリ", image_url:"🪳"}, {name:"カメムシ", image_url:"🪲"}]
+  ↓ map
+["🪳", "🪲"]
+```
+
+- `join(" ")` → 配列を文字列に結合
+```javascript
+["🪳", "🪲"]  →  "🪳 🪲"
+```
+
+---
+
+## 5. headersの役割
+
+```javascript
+headers: {
+    "Authorization": "Bearer " + token,  // 誰が送っているかの証明
+    "Content-Type": "application/json"    // bodyがJSON形式であることを宣言
+}
+```
+
+- **Authorization** → バックエンドの`get_current_db_user`がJWTを検証する。ないと401エラー
+- **Content-Type** → ないとバックエンドがbodyを正しく読めず422エラー
+- JWTはサーバーが状態を記憶しないため、認証が必要な全リクエストに毎回付ける必要がある
+
+---
+
+## 6. ボトムナビのリンク設定
+
+```html
+<nav class="bottom-nav">
+    <div class="nav-item" onclick="location.href='/creatures-page'">
+        <span class="nav-icon">📖</span>
+        <span>図鑑</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/cage-page'">
+        <span class="nav-icon">🧺</span>
+        <span>虫かご</span>
+    </div>
+    <div class="nav-item">
+        <span class="nav-icon">👤</span>
+        <span>マイページ</span>
+    </div>
+</nav>
+```
+
+- 各ページで現在地に`active`クラスを付ける
+- マイページは未実装
+
+---
+
+## 7. JavaScriptの重要概念
+
+| 概念 | 説明 |
+|------|------|
+| `fetch()` | バックエンドのAPIを呼び出す関数 |
+| `await` | レスポンスが返ってくるまで待つ |
+| `async` | awaitを使う関数に必ず付ける |
+| `localStorage` | ブラウザにデータを保存（tokenの保管） |
+| `JSON.stringify()` | オブジェクト→JSON文字列に変換 |
+| `res.json()` | JSON文字列→JavaScriptのオブジェクトに変換 |
+| `forEach` | 配列を1つずつ処理（awaitは使えない） |
+| `for...of` | 配列を1つずつ処理（awaitが使える） |
+| `map` | 配列を別の配列に変換 |
+| `join` | 配列を文字列に結合 |
+
+---
+
+## 次回予告
+
+- 虫かごに生物を入れるフロント実装
+- マイページの実装
+- PlantNet APIとの連携（写真から生物を登録）
