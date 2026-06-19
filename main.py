@@ -262,13 +262,14 @@ async def identify_creature(
     name = top["taxon"].get("preferred_common_name", top["taxon"]["name"])
     scientific = top["taxon"]["name"]
     score = top["combined_score"]
+    image_url = top["taxon"].get("default_photo", {}).get("square_url", None)  # ← 追加
 
     new_creature = Creature(
-        name=name,
-        image_url=None,
-        care_guide=None,
-        owner_id=db_user.id
-    )
+    name=name,
+    image_url=image_url,   # ← Noneから変更
+    care_guide=None,
+    owner_id=db_user.id
+)
     db.add(new_creature)
     db.commit()
     db.refresh(new_creature)
