@@ -1394,3 +1394,222 @@ headers: {
 - 虫かごに生物を入れるフロント実装
 - マイページの実装
 - PlantNet APIとの連携（写真から生物を登録）
+
+# Day 13 まとめ：虫かご連携・写真識別API（iNaturalist）
+
+---
+
+## 1. 今日やったこと
+
+```
+虫かごに入れるボタン（フロント実装）
+  ↓
+PlantNet → iNaturalist APIへ切り替え（昆虫・動物にも対応）
+  ↓
+写真アップロード → 識別 → 登録の一連フロー実装
+  ↓
+識別した生物の画像をアイコンとして保存・表示
+```
+
+---
+
+## 2. 虫かごに入れるボタン
+
+### モーダルでかごを選択
+
+```javascript
+let selectedCreatureId = null;
+
+async function openCageModal(creatureId) {
+    selectedCreatureId = creatureId;
+    const res = await fetch("/cages", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const cages = await res.json();
+
+    const cageList = document.getElementById("cage-select-list");
+    cageList.innerHTML = "";
+    cages.forEach(cage => {
+        cageList.innerHTML += `
+            <div onclick="putIntoCage(${cage.id})" style="...">
+                🧺 ${cage.name}
+            </div>
+        `;
+    });
+    document.getElementById("cage-modal").style.display = "block";
+}
+
+async function putIntoCage(cageId) {
+    const res = await fetch(`/creatures/${selectedCreatureId}/cage/${cageId}`, {
+        method: "PUT",
+        headers: { "Authorization": "Bearer " + token }
+    });
+    if (res.ok) {
+        document.getElementById("cage-modal").style.display = "none";
+        loadCreatures();
+    }
+}
+```
+
+### event.stopPropagation()
+
+```javascript
+<button onclick="event.stopPropagation(); openCageModal(${c.id})">かごに入れる</button>
+```
+
+- カード自体に`onclick="location.href='/detail-page?id=...'"`が付いている
+- ボタンを押すと本来カードのクリックイベントも一緒に発火してしまう（イベントバブリング）
+- `stopPropagation()`で「このクリックは親要素まで伝えない」と止める
+
+---
+
+## 3. PlantNet → iNaturalistへ切り替え
+
+### 理由
+
+- PlantNetは**植物専用**。カマキリの写真を送ると404エラー（Species not found）
+- iNaturalistは植物・昆虫・動物まで幅広く識別できる
+
+### バックエンド（main.py）
+
+```python
+@app.post("/identify")
+async def identify_creature(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    db_user=Depends(get_current_db_user)
+):
+    token = os.environ["INATURALIST_API_TOKEN"]
+    url = "https://api.inaturalist.org/v1/computervision/score_image"
+    contents = await file.read()
+    files = [("image", (file.filename, contents))]
+    headers = {"Authorization": token}
+    response = http_requests.post(url, files=files, headers=headers)
+    result = response.json()
+
+    top = result["results"][0]
+    name = top["taxon"].get("preferred_common_name", top["taxon"]["name"])
+    scientific = top["taxon"]["name"]
+    score = top["combined_score"]
+    image_url = top["taxon"].get("default_photo", {}).get("square_url", None)
+
+    new_creature = Creature(
+        name=name,
+        image_url=image_url,
+        care_guide=None,
+        owner_id=db_user.id
+    )
+    db.add(new_creature)
+    db.commit()
+    db.refresh(new_creature)
+    return {"creature": new_creature, "scientific_name": scientific, "score": score}
+```
+
+- `default_photo.square_url` → iNaturalist側が持っている種の代表写真のURLを画像として保存
+- スコア（信頼度）が一緒に返ってくるので、識別の確からしさも分かる
+
+### フロントエンド（creatures.html）
+
+```javascript
+async function identifyAndRegister() {
+    const fileInput = document.getElementById("photo-upload");
+    if (!fileInput.files[0]) {
+        alert("写真を選択してください");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    const res = await fetch("/identify", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token },
+        body: formData
+    });
+
+    if (res.ok) {
+        const data = await res.json();
+        alert(`${data.creature.name}を登録しました！（信頼度: ${data.score.toFixed(1)}%）`);
+        closeModal();
+        loadCreatures();
+    } else {
+        alert("識別できませんでした");
+    }
+}
+```
+
+- `addCreature()`（名前必須の手動登録）とは完全に別の関数
+- 名前はAPIが自動で返すので、ユーザーの入力は不要
+
+---
+
+## 4. 画像URLの表示対応（絵文字 → URL混在）
+
+絵文字（`🐛`）と画像URL（`https://...`）の両方が`image_url`に入るようになったため、各画面で表示方法を分岐させる必要があった。
+
+### creatures.html（一覧）
+
+```javascript
+const icon = c.image_url
+    ? (c.image_url.startsWith("http")
+        ? `<img src="${c.image_url}" style="width:50px; height:50px; border-radius:8px; object-fit:cover;">`
+        : c.image_url)
+    : "🐛";
+```
+
+### detail.html（詳細）
+
+```javascript
+const iconEl = document.getElementById("creature-icon");
+if (c.image_url && c.image_url.startsWith("http")) {
+    iconEl.innerHTML = `<img src="${c.image_url}" style="width:100px; height:100px; border-radius:12px; object-fit:cover;">`;
+} else {
+    iconEl.textContent = c.image_url || "🐛";
+}
+```
+
+- `textContent`はテキストとしてそのまま表示するため、URLが文字列として表示されてしまう
+- `<img>`タグを使いたい場合は`innerHTML`を使う必要がある
+
+### cage.html（虫かご内一覧）
+
+```javascript
+const icons = creatures.map(c => {
+    if (c.image_url && c.image_url.startsWith("http")) {
+        return `<img src="${c.image_url}" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">`;
+    }
+    return c.image_url || "🐛";
+}).join(" ");
+```
+
+**ポイント：`textContent` vs `innerHTML`**
+
+| プロパティ | 動作 |
+|---|---|
+| `textContent` | HTMLタグを文字列としてそのまま表示（`<img>`はテキスト扱い） |
+| `innerHTML` | HTMLタグを解釈して実際の要素として描画 |
+
+---
+
+## 5. iNaturalist APIは無料か
+
+- 公開・無料で利用可能。APIキー不要（今回のトークンはユーザー認証用）
+- ただし`score_image`（識別用エンドポイント）は公式ドキュメント化されていない「内部API」
+- 大量・商用アクセスは想定されておらず、個人学習・小規模プロジェクト向け
+
+---
+
+## 6. 今日の主なエラーと気づき
+
+| エラー・問題 | 原因 | 対応 |
+|---|---|---|
+| PlantNetで404エラー | 植物専用APIに昆虫の写真を送った | iNaturalistへ切り替え |
+| 写真登録後、URLが文字列で表示される | `textContent`で`<img>`タグを描画できない | `innerHTML`に変更し、URL/絵文字で分岐 |
+| 写真だけで登録できない | フロント側のconsole.logで原因を特定する必要があった | F12のConsoleでfetchの状態を確認 |
+
+---
+
+## 次回予告
+
+- マイページの実装
+- Day14内容（未定）
