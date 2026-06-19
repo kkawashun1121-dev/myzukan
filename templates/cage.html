@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>虫かご</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="header">
+    <h1>🧺 虫かご</h1>
+    <button class="add-btn" onclick="openAddCageModal()">＋追加</button>
+</div>
+
+<div id="cage-list" style="padding: 16px;"></div>
+
+<nav class="bottom-nav">
+    <div class="nav-item" onclick="location.href='/creatures-page'">
+        <span class="nav-icon">📖</span>
+        <span>図鑑</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/cage-page'">
+        <span class="nav-icon">🧺</span>
+        <span>虫かご</span>
+    </div>
+    <div class="nav-item">
+        <span class="nav-icon">👤</span>
+        <span>マイページ</span>
+    </div>
+</nav>
+<!-- かご追加モーダル -->
+<div id="add-cage-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:100;">
+    <div style="background:white; margin:20% auto; padding:24px; border-radius:12px; width:300px;">
+        <h3 style="margin-bottom:16px;">虫かごを追加</h3>
+        <input type="text" id="cage-name" placeholder="かごの名前（例：春の庭）">
+        <button onclick="addCage()" style="width:100%; margin-top:12px;">追加する</button>
+        <button onclick="closeAddCageModal()" style="width:100%; margin-top:8px; background:#eee; color:#333;">キャンセル</button>
+    </div>
+</div>
+
+<script>
+    const token = localStorage.getItem("token");
+
+    async function loadCages() {
+        const res = await fetch("/cages", {
+            headers: { "Authorization": "Bearer " + token }
+        });
+        const cages = await res.json();
+        const list = document.getElementById("cage-list");
+        list.innerHTML = "";
+
+        for (const cage of cages) {
+            const creaturesRes = await fetch(`/cages/${cage.id}/creatures`, {
+                headers: { "Authorization": "Bearer " + token }
+            });
+            const creatures = await creaturesRes.json();
+
+            const icons = creatures.map(c => c.image_url || "🐛").join(" ");
+
+            list.innerHTML += `
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 style="margin-bottom:8px;">🧺 ${cage.name}</h3>
+                    <div style="font-size:32px; min-hei🧺t:48px;">${icons || "空っぽ"}</div>
+                </div>
+            `;
+        }
+    }
+
+    function openAddCageModal() {
+        document.getElementById("add-cage-modal").style.display = "block";
+    }
+
+    function closeAddCageModal() {
+        document.getElementById("add-cage-modal").style.display = "none";
+    }
+
+    async function addCage() {
+        const name = document.getElementById("cage-name").value;
+        if (!name) return;
+
+        const res = await fetch("/cages", {
+            method: "POST",
+            body: JSON.stringify({ name: name })
+        });
+
+        if (res.ok) {
+            document.getElementById("cage-name").value = "";
+            closeAddCageModal();
+            loadCages();
+        }
+    }
+
+    loadCages();
+</script>
+
+</body>
+</html>
