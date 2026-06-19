@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends , Request
+from fastapi import FastAPI, HTTPException, Depends , Request, File, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine
@@ -13,6 +13,8 @@ from dotenv import load_dotenv
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+import requests as http_requests
 
 load_dotenv()
 
@@ -224,3 +226,55 @@ def creatures_page(request: Request):
 @app.get("/login-page")
 def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html")
+
+@app.get("/creatures/{creature_id}")
+def get_creature(creature_id: int, db: Session = Depends(get_db), db_user=Depends(get_current_db_user)):
+    creature = db.query(Creature).filter(Creature.id == creature_id, Creature.owner_id == db_user.id).first()
+    if not creature:
+        raise HTTPException(status_code=404, detail="見つかりません")
+    return creature
+
+@app.get("/detail-page")
+def detail_page(request: Request):
+    return templates.TemplateResponse(request=request, name="detail.html")
+
+@app.get("/cage-page")
+def cage_page(request: Request):
+    return templates.TemplateResponse(request=request, name="cage.html")
+
+@app.post("/identify")
+async def identify_creature(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    db_user=Depends(get_current_db_user)
+):
+    token = os.environ["INATURALIST_API_TOKEN"]
+    url = "https://api.inaturalist.org/v1/computervision/score_image"
+
+    contents = await file.read()
+    files = [("image", (file.filename, contents))]
+    headers = {"Authorization": token}
+
+    response = http_requests.post(url, files=files, headers=headers)
+    result = response.json()
+
+    top = result["results"][0]
+    name = top["taxon"].get("preferred_common_name", top["taxon"]["name"])
+    scientific = top["taxon"]["name"]
+    score = top["combined_score"]
+
+    new_creature = Creature(
+        name=name,
+        image_url=None,
+        care_guide=None,
+        owner_id=db_user.id
+    )
+    db.add(new_creature)
+    db.commit()
+    db.refresh(new_creature)
+
+    return {
+        "creature": new_creature,
+        "scientific_name": scientific,
+        "score": score
+    }
