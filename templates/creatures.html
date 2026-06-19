@@ -33,17 +33,35 @@
 </nav>
 
 <div id="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:100;">
-    <div style="background:white; margin:15% auto; padding:24px; border-radius:12px; width:300px;">
+    <div style="background:white; margin:10% auto; padding:24px; border-radius:12px; width:300px;">
         <h3 style="margin-bottom:16px;">生物を登録</h3>
         <input type="text" id="new-name" placeholder="生物名（例：カマキリ）">
 
         <p style="margin-top:12px; margin-bottom:8px; font-size:13px; color:#888;">アイコンを選択</p>
-        <div id="icon-picker" style="display:flex; flex-wrap:wrap; gap:8px;">
-        </div>
+        <div id="icon-picker" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
         <input type="hidden" id="selected-icon" value="">
 
         <button onclick="addCreature()" style="width:100%; margin-top:16px;">登録する</button>
+
+        <hr style="margin:16px 0; border:none; border-top:1px solid #eee;">
+
+        <p style="margin-bottom:8px; font-size:13px; color:#888;">または写真から識別</p>
+        <input type="file" id="photo-upload" accept="image/*" style="width:100%;">
+        <button onclick="identifyAndRegister()" style="width:100%; margin-top:8px; background:#c8e6c9; color:#333;">
+            📷 写真から登録
+        </button>
+
         <button onclick="closeModal()" style="width:100%; margin-top:8px; background:#eee; color:#333;">キャンセル</button>
+    </div>
+</div>
+<div id="cage-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:100;">
+    <div style="background:white; margin:20% auto; padding:24px; border-radius:12px; width:300px;">
+        <h3 style="margin-bottom:16px;">どのかごに入れますか？</h3>
+        <div id="cage-select-list"></div>
+        <button onclick="document.getElementById('cage-modal').style.display='none'"
+                style="width:100%; margin-top:8px; background:#eee; color:#333;">
+            キャンセル
+        </button>
     </div>
 </div>
 <script>
@@ -105,7 +123,12 @@ async function loadCreatures() {
         const badge = c.care_guide
             ? '<span class="badge ok">飼育方法あり</span>'
             : '<span class="badge none">飼育方法未生成</span>';
-        const icon = c.image_url || "";
+
+        const icon = c.image_url
+            ? (c.image_url.startsWith("http")
+                ? `<img src="${c.image_url}" style="width:50px; height:50px; border-radius:8px; object-fit:cover;">`
+                : c.image_url)
+            : "🐛";
 
         list.innerHTML += `
             <div class="creature-card" onclick="location.href='/detail-page?id=${c.id}'" style="cursor:pointer;">
@@ -114,11 +137,81 @@ async function loadCreatures() {
                     <h3>${c.name}</h3>
                     ${badge}
                 </div>
+                <button onclick="event.stopPropagation(); openCageModal(${c.id})" 
+                        style="margin-left:auto; background:#a8c8e8; color:#333; padding:6px 12px; font-size:12px; border-radius:20px;">
+                    かごに入れる
+                </button>
             </div>
         `;
     });
 }
+let selectedCreatureId = null;
 
+async function openCageModal(creatureId) {
+    selectedCreatureId = creatureId;
+
+    const res = await fetch("/cages", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const cages = await res.json();
+
+    const cageList = document.getElementById("cage-select-list");
+    cageList.innerHTML = "";
+    cages.forEach(cage => {
+        cageList.innerHTML += `
+            <div onclick="putIntoCage(${cage.id})" 
+                 style="padding:12px; border:1px solid #eee; border-radius:8px; margin-bottom:8px; cursor:pointer;">
+                🧺 ${cage.name}
+            </div>
+        `;
+    });
+
+    document.getElementById("cage-modal").style.display = "block";
+}
+
+async function putIntoCage(cageId) {
+    const res = await fetch(`/creatures/${selectedCreatureId}/cage/${cageId}`, {
+        method: "PUT",
+        headers: { "Authorization": "Bearer " + token }
+    });
+    if (res.ok) {
+        document.getElementById("cage-modal").style.display = "none";
+        loadCreatures();
+    }
+}
+
+async function identifyAndRegister() {
+    const fileInput = document.getElementById("photo-upload");
+    if (!fileInput.files[0]) {
+        alert("写真を選択してください");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", fileInput.files[0]);
+
+    console.log("送信開始");  // 追加
+
+    const res = await fetch("/identify", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token },
+        body: formData
+    });
+
+    console.log("ステータス:", res.status);  // 追加
+
+    if (res.ok) {
+        const data = await res.json();
+        console.log("結果:", data);  // 追加
+        alert(`${data.creature.name}を登録しました！（信頼度: ${data.score.toFixed(1)}%）`);
+        closeModal();
+        loadCreatures();
+    } else {
+        const err = await res.json();
+        console.log("エラー:", err);  // 追加
+        alert("識別できませんでした");
+    }
+}
 loadCreatures();
 </script>
 </body>

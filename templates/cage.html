@@ -56,8 +56,12 @@
             });
             const creatures = await creaturesRes.json();
 
-            const icons = creatures.map(c => c.image_url || "🐛").join(" ");
-
+            const icons = creatures.map(c => {
+                if (c.image_url && c.image_url.startsWith("http")) {
+                    return `<img src="${c.image_url}" style="width:40px; height:40px; border-radius:8px; object-fit:cover;">`;
+                }
+                return c.image_url || "🐛";
+            }).join(" ");
             list.innerHTML += `
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin-bottom:8px;">🧺 ${cage.name}</h3>

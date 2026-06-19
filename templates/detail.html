@@ -55,7 +55,12 @@
         });
         const c = await res.json();
 
-        document.getElementById("creature-icon").textContent = c.image_url || "🐛";
+        const iconEl = document.getElementById("creature-icon");
+        if (c.image_url && c.image_url.startsWith("http")) {
+            iconEl.innerHTML = `<img src="${c.image_url}" style="width:100px; height:100px; border-radius:12px; object-fit:cover;">`;
+        } else {
+            iconEl.textContent = c.image_url || "🐛";
+        }
         document.getElementById("creature-name").textContent = c.name;
         document.getElementById("care-guide").textContent = c.care_guide || "未生成";
     }
