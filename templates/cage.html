@@ -24,12 +24,11 @@
         <span class="nav-icon">🧺</span>
         <span>虫かご</span>
     </div>
-    <div class="nav-item">
-        <span class="nav-icon">👤</span>
-        <span>マイページ</span>
+    <div class="nav-item" onclick="location.href='/mypage'">
+        <span class="nav-icon">👤</span><span>マイページ</span>
     </div>
 </nav>
-<!-- かご追加モーダル -->
+
 <div id="add-cage-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:100;">
     <div style="background:white; margin:20% auto; padding:24px; border-radius:12px; width:300px;">
         <h3 style="margin-bottom:16px;">虫かごを追加</h3>
@@ -85,6 +84,10 @@
 
         const res = await fetch("/cages", {
             method: "POST",
+            headers: {
+                "Authorization": "Bearer " + token,
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify({ name: name })
         });
 
