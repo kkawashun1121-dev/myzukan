@@ -16,6 +16,11 @@ from fastapi.templating import Jinja2Templates
 
 import requests as http_requests
 
+
+import io
+from PIL import Image
+import pillow_heif
+
 load_dotenv()
 
 app = FastAPI()
@@ -252,11 +257,30 @@ async def identify_creature(
     url = "https://api.inaturalist.org/v1/computervision/score_image"
 
     contents = await file.read()
-    files = [("image", (file.filename, contents))]
+    filename = file.filename
+
+    pillow_heif.register_heif_opener()
+
+# HEICの場合だけ変換
+    if filename and filename.lower().endswith(('.heic', '.heif')):
+        try:
+            image = Image.open(io.BytesIO(contents))
+            output = io.BytesIO()
+            image.convert("RGB").save(output, format="JPEG")
+            contents = output.getvalue()
+            filename = "image.jpg"
+        except Exception:
+            pass
+
+    files = [("image", (filename, contents))]
     headers = {"Authorization": token}
 
     response = http_requests.post(url, files=files, headers=headers)
     result = response.json()
+    print("iNaturalist response:", result)
+
+    if "results" not in result or not result["results"]:
+        raise HTTPException(status_code=400, detail="識別できませんでした")
 
     top = result["results"][0]
     name = top["taxon"].get("preferred_common_name", top["taxon"]["name"])
@@ -266,7 +290,7 @@ async def identify_creature(
 
     new_creature = Creature(
     name=name,
-    image_url=image_url,   # ← Noneから変更
+    image_url=image_url,
     care_guide=None,
     owner_id=db_user.id
 )
