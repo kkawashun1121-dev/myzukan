@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マイページ</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="header">
+    <h1>👤 マイページ</h1>
+</div>
+
+<div style="padding: 16px;">
+
+    <div class="card" style="margin-bottom: 16px;">
+        <h3 id="username" style="font-size: 20px;">読み込み中...</h3>
+        <p style="color: #888; font-size: 13px;">ユーザー名</p>
+    </div>
+
+    <div class="card" style="margin-bottom: 16px; display: flex; gap: 16px;">
+        <div style="flex:1; text-align:center;">
+            <div id="creature-count" style="font-size: 32px; font-weight: bold;">-</div>
+            <div style="font-size: 12px; color: #888;">登録生物</div>
+        </div>
+        <div style="flex:1; text-align:center;">
+            <div id="cage-count" style="font-size: 32px; font-weight: bold;">-</div>
+            <div style="font-size: 12px; color: #888;">虫かご</div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-bottom: 16px;">
+        <h3 style="margin-bottom: 12px;">🔑 パスワード変更</h3>
+        <input type="password" id="current-password" placeholder="現在のパスワード" style="margin-bottom: 8px;">
+        <input type="password" id="new-password" placeholder="新しいパスワード" style="margin-bottom: 8px;">
+        <button onclick="changePassword()" style="width: 100%;">変更する</button>
+        <p id="password-msg" style="margin-top: 8px; font-size: 13px; color: #4caf50;"></p>
+    </div>
+
+    <button onclick="logout()" style="width: 100%; background: #ffcdd2; color: #c62828;">ログアウト</button>
+
+</div>
+
+<nav class="bottom-nav">
+    <div class="nav-item" onclick="location.href='/creatures-page'"><span class="nav-icon">📖</span><span>図鑑</span></div>
+    <div class="nav-item" onclick="location.href='/cage-page'"><span class="nav-icon">🧺</span><span>虫かご</span></div>
+    <div class="nav-item active"><span class="nav-icon">👤</span><span>マイページ</span></div>
+</nav>
+
+<script>
+const token = localStorage.getItem("token");
+
+async function loadMe() {
+    const res = await fetch("/me", {
+        headers: { "Authorization": "Bearer " + token }
+    });
+    const data = await res.json();
+    document.getElementById("username").textContent = data.username;
+    document.getElementById("creature-count").textContent = data.creature_count;
+    document.getElementById("cage-count").textContent = data.cage_count;
+}
+
+async function changePassword() {
+    const current = document.getElementById("current-password").value;
+    const next = document.getElementById("new-password").value;
+    if (!current || !next) return;
+
+    const res = await fetch("/me/password", {
+        method: "PUT",
+        headers: {
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ current_password: current, new_password: next })
+    });
+
+    const msg = document.getElementById("password-msg");
+    if (res.ok) {
+        msg.textContent = "✅ パスワードを変更しました";
+        msg.style.color = "#4caf50";
+        document.getElementById("current-password").value = "";
+        document.getElementById("new-password").value = "";
+    } else {
+        msg.textContent = "❌ 現在のパスワードが違います";
+        msg.style.color = "#f44336";
+    }
+}
+
+function logout() {
+    localStorage.removeItem("token");
+    location.href = "/login-page";
+}
+
+loadMe();
+</script>
+</body>
+</html>
